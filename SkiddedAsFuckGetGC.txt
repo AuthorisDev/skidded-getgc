@@ -1,0 +1,34 @@
+static int getgc(DWORD rL)
+{
+	const auto GlobalState = (rL + 20) - *(DWORD*)(rL + 20);
+	const auto DeadMask = *(BYTE*)(GlobalState + 24) & 3;
+	auto Object = *(GCObject * *)(GlobalState + 56);
+
+	auto IncludeTables = true;
+
+	r_lua_createtable(rL, 0, 0, 0);
+	auto n = 1;
+	while (Object != nullptr)
+	{
+		const auto TT = *(BYTE*)((DWORD)Object + 5);
+
+		/* Make sure the object is not dead and is a 'safe' type (without including tables) */
+		if ((TT == R_LUA_TFUNCTION || (IncludeTables ? TT == R_LUA_TTABLE : TT == R_LUA_TFUNCTION) || (IncludeTables ? TT == R_LUA_TUSERDATA : TT == R_LUA_TFUNCTION)) && (*(BYTE*)((DWORD)Object + 4) ^ 3) & DeadMask)
+		{
+			lua_Number conv = cast_num(n++);
+			r_setnvalue(*(r_lua_TValue * *)(rL + 24), r_xor_number(conv));
+			r_incr_top(rL);
+
+			StkId& Top = *(StkId*)(rL + 24);
+			Top->tt = TT;
+			Top->value.p = (void*)Object;
+			r_incr_top(rL);
+
+			//RL.SetTable(-3);
+			r_lua_settable(rL, -3);
+		}
+
+		Object = Object->gch.next;
+	}
+	return 1;
+}
